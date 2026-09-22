@@ -4,6 +4,10 @@
 # Compiled executable
 process_termination
 
+# Backup files
+*.backup
+*.bak
+
 # Runtime logs
 results/logs/*
 
