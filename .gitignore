@@ -1,0 +1,11 @@
+# Compiled object files
+*.o
+
+# Compiled executable
+process_termination
+
+# Runtime logs
+results/logs/*
+
+# Generated screenshots
+results/screenshots/*
