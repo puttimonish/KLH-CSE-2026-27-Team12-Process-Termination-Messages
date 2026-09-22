@@ -1,8 +1,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include "signal_handler.h"
+
 #include "process_manager.h"
+#include "signal_handler.h"
+#include "event_store.h"
+#include "logger.h"
+#include "memory_monitor.h"
+#include "thread_monitor.h"
+#include "dashboard.h"
 
 static void display_banner(void)
 {
@@ -18,17 +24,21 @@ static void display_banner(void)
 
 static void normal_process_demo(void)
 {
+    printf("\nStarting Phase 1 demonstration...\n");
+
     printf("\n[PROCESS MANAGER]\n");
     printf("Creating child process using fork()...\n");
 
     pid_t child = create_child_process();
 
-    if (child < 0) {
+    if (child < 0)
+    {
         fprintf(stderr, "Failed to create child process.\n");
         return;
     }
 
-    if (child == 0) {
+    if (child == 0)
+    {
         printf("\n[CHILD PROCESS]\n");
         printf("PID        : %d\n", getpid());
         printf("Parent PID : %d\n", getppid());
@@ -51,12 +61,22 @@ static void normal_process_demo(void)
 
     printf("\nParent detected child termination.\n");
 
+    event_store_add(child,
+                    getpid(),
+                    "NORMAL_TERMINATION",
+                    "Child exited normally");
+
+    log_process_event(child,
+                      getpid(),
+                      "NORMAL_TERMINATION",
+                      "Child exited normally");
+
     print_process_result(&result);
 }
 
 static void signal_termination_demo(void)
 {
-    pid_t child;
+    printf("\nStarting Phase 2: Signal-Based Termination...\n");
 
     printf("\n============================================================\n");
     printf("             PHASE 2: SIGNAL TERMINATION\n");
@@ -65,11 +85,11 @@ static void signal_termination_demo(void)
     printf("\n[PROCESS MANAGER]\n");
     printf("Creating child process using fork()...\n");
 
-    child = fork();
+    pid_t child = create_child_process();
 
     if (child < 0)
     {
-        perror("fork");
+        fprintf(stderr, "Failed to create child process.\n");
         return;
     }
 
@@ -104,24 +124,59 @@ static void signal_termination_demo(void)
         return;
     }
 
+    printf("\n============================================================\n");
+    printf("                 SIGNAL TERMINATION EVENT\n");
+    printf("============================================================\n");
+    printf("Process PID      : %d\n", child);
+    printf("Signal           : SIGTERM (15)\n");
+    printf("Termination      : Requested by parent\n");
+    printf("============================================================\n");
+
+    event_store_add(child,
+                    getpid(),
+                    "SIGNAL_TERMINATION",
+                    "SIGTERM sent by parent");
+
+    log_process_event(child,
+                      getpid(),
+                      "SIGNAL_TERMINATION",
+                      "SIGTERM sent by parent");
+
     ProcessResult result = wait_for_process(child);
 
     printf("\nParent detected child termination.\n");
 
     print_process_result(&result);
 }
+
 int main(void)
 {
     display_banner();
 
-    printf("\nStarting Phase 1 demonstration...\n");
+    event_store_init();
+    logger_init();
 
-normal_process_demo();
+    normal_process_demo();
 
-printf("\nStarting Phase 2: Signal-Based Termination...\n");
+    signal_termination_demo();
 
-signal_termination_demo();
+    event_store_print();
 
-printf("\nAll demonstrations completed successfully.\n");
+    printf("\n============================================================\n");
+    printf("              PROJECT STATUS SUMMARY\n");
+    printf("============================================================\n");
+
+    printf("Phase 1 : Normal process termination       [COMPLETED]\n");
+    printf("Phase 2 : Signal-based termination         [COMPLETED]\n");
+    printf("Event Store :                            [ACTIVE]\n");
+    printf("Process Logger :                         [ACTIVE]\n");
+    printf("Recorded Events : %d\n", event_store_count());
+
+    printf("============================================================\n");
+
+    logger_close();
+
+    printf("\nAll demonstrations completed successfully.\n");
+
     return 0;
 }
