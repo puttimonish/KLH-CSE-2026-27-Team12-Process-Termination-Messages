@@ -10,12 +10,35 @@
 #include "thread_monitor.h"
 #include "logger.h"
 #include "event_store.h"
+#include "dashboard.h"
+
+static void record_event(const ProcessResult *result,
+                         const char *type,
+                         const char *details)
+{
+    event_store_add(
+        result->pid,
+        result->parent_pid,
+        type,
+        details
+    );
+
+    log_process_event(
+        result->pid,
+        result->parent_pid,
+        type,
+        details
+    );
+}
 
 static void normal_process_demo(void)
 {
     int ipc_fd[2];
 
-    printf("\nStarting Phase 1 demonstration...\n");
+    dashboard_print_phase(
+        "PHASE 1: NORMAL TERMINATION",
+        "fork() + IPC + memory monitoring + thread monitoring + waitpid()"
+    );
 
     if (ipc_create(ipc_fd) != 0)
     {
@@ -42,11 +65,26 @@ static void normal_process_demo(void)
         printf("Parent PID : %d\n", getppid());
         printf("Status     : Running\n");
 
+        ThreadInfo thread_info;
+
+        if (thread_monitor_start(&thread_info) == 0)
+        {
+            thread_monitor_print(&thread_info);
+        }
+        else
+        {
+            printf("Thread Monitor : FAILED TO START\n");
+        }
+
         MemoryInfo memory;
 
         if (memory_monitor_read(getpid(), &memory) == 0)
         {
             memory_monitor_print(getpid(), &memory);
+        }
+        else
+        {
+            printf("Memory Monitor : UNAVAILABLE\n");
         }
 
         printf("\nChild is performing its task...\n");
@@ -59,16 +97,19 @@ static void normal_process_demo(void)
 
         printf("Child is terminating normally...\n");
 
+        thread_monitor_stop(&thread_info);
+
         ipc_close(ipc_fd[1]);
         exit(0);
     }
 
     ipc_close(ipc_fd[1]);
 
-    printf("\n[PARENT PROCESS]\n");
-    printf("PID        : %d\n", getpid());
-    printf("Child PID  : %d\n", child);
-    printf("Status     : Monitoring child...\n");
+    dashboard_print_child_state(
+        getpid(),
+        child,
+        "RUNNING - PARENT MONITORING"
+    );
 
     char ipc_message[256];
 
@@ -82,37 +123,24 @@ static void normal_process_demo(void)
 
     ProcessResult result = wait_for_process(child);
 
-    event_store_add(
-        result.pid,
-        result.parent_pid,
-        "NORMAL_TERMINATION",
-        "Child exited normally"
-    );
-
-    log_process_event(
-        result.pid,
-        result.parent_pid,
+    record_event(
+        &result,
         "NORMAL_TERMINATION",
         "Child exited normally"
     );
 
     printf("\nParent detected child termination.\n");
-
-    printf("\n============================================================\n");
-    printf("                 TERMINATION REPORT\n");
-    printf("============================================================\n");
     print_process_result(&result);
 }
 
 static void signal_termination_demo(void)
 {
-    printf("\nStarting Phase 2: Signal-Based Termination...\n");
+    dashboard_print_phase(
+        "PHASE 2: SIGTERM TERMINATION",
+        "Parent requests child termination using kill(SIGTERM)"
+    );
 
-    printf("\n============================================================\n");
-    printf("             PHASE 2: SIGNAL TERMINATION\n");
-    printf("============================================================\n");
-
-    pid_t child = fork();
+    pid_t child = create_child_process();
 
     if (child < 0)
     {
@@ -127,7 +155,7 @@ static void signal_termination_demo(void)
         printf("\n[CHILD PROCESS]\n");
         printf("PID        : %d\n", getpid());
         printf("Parent PID : %d\n", getppid());
-        printf("Status     : Waiting for termination signal...\n");
+        printf("Status     : Waiting for SIGTERM...\n");
 
         while (1)
         {
@@ -136,70 +164,107 @@ static void signal_termination_demo(void)
         }
     }
 
-    printf("\n[PARENT PROCESS]\n");
-    printf("PID        : %d\n", getpid());
-    printf("Child PID  : %d\n", child);
-    printf("Status     : Monitoring child...\n");
+    dashboard_print_child_state(
+        getpid(),
+        child,
+        "WAITING FOR SIGTERM"
+    );
 
     sleep(2);
 
     printf("\nParent sending SIGTERM to child...\n");
 
-    kill(child, SIGTERM);
+    if (kill(child, SIGTERM) == -1)
+    {
+        perror("kill(SIGTERM) failed");
+        return;
+    }
 
     ProcessResult result = wait_for_process(child);
 
-    printf("\n============================================================\n");
-    printf("                 TERMINATION REPORT\n");
-    printf("============================================================\n");
     print_process_result(&result);
 
-    event_store_add(
-        result.pid,
-        result.parent_pid,
-        "SIGNAL_TERMINATION",
-        "SIGTERM sent by parent"
-    );
-
-    log_process_event(
-        result.pid,
-        result.parent_pid,
+    record_event(
+        &result,
         "SIGNAL_TERMINATION",
         "SIGTERM sent by parent"
     );
 }
 
+static void sigkill_termination_demo(void)
+{
+    dashboard_print_phase(
+        "PHASE 3: SIGKILL TERMINATION",
+        "Parent forcefully terminates a child using kill(SIGKILL)"
+    );
+
+    pid_t child = create_child_process();
+
+    if (child < 0)
+    {
+        perror("fork failed");
+        return;
+    }
+
+    if (child == 0)
+    {
+        printf("\n[CHILD PROCESS]\n");
+        printf("PID        : %d\n", getpid());
+        printf("Parent PID : %d\n", getppid());
+        printf("Status     : Running until forcefully terminated...\n");
+
+        while (1)
+        {
+            printf("Child remains alive...\n");
+            sleep(1);
+        }
+    }
+
+    dashboard_print_child_state(
+        getpid(),
+        child,
+        "RUNNING - TARGET FOR SIGKILL"
+    );
+
+    sleep(2);
+
+    printf("\nParent sending SIGKILL to child...\n");
+
+    if (kill(child, SIGKILL) == -1)
+    {
+        perror("kill(SIGKILL) failed");
+        return;
+    }
+
+    ProcessResult result = wait_for_process(child);
+
+    print_process_result(&result);
+
+    record_event(
+        &result,
+        "SIGNAL_TERMINATION",
+        "SIGKILL sent by parent"
+    );
+}
+
 int main(void)
 {
-    printf("============================================================\n");
-    printf("          PROCESS TERMINATION MONITOR\n");
-    printf("       Linux Process Lifecycle System\n");
-    printf("============================================================\n");
-    printf("          Operating Systems & Systems Programming\n");
-    printf("                    25CS2104E\n");
-    printf("============================================================\n");
+    dashboard_print_header();
 
     logger_init();
     event_store_init();
 
     normal_process_demo();
-
     signal_termination_demo();
+    sigkill_termination_demo();
 
-    printf("\n");
     event_store_print();
 
-    printf("\n============================================================\n");
-    printf("              PROJECT STATUS SUMMARY\n");
-    printf("============================================================\n");
-    printf("Phase 1 : Normal process termination       [COMPLETED]\n");
-    printf("Phase 2 : Signal-based termination         [COMPLETED]\n");
-    printf("IPC      : Parent/Child communication      [ACTIVE]\n");
-    printf("Memory Monitor :                            [ACTIVE]\n");
-    printf("Event Store :                              [ACTIVE]\n");
-    printf("Process Logger :                           [ACTIVE]\n");
-    printf("Recorded Events : %d\n", event_store_count());
-    printf("============================================================\n");
+    dashboard_print_summary(
+        1,
+        2,
+        event_store_count()
+    );
 
     logger_close();
 
