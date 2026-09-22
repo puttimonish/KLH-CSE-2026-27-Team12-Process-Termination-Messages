@@ -1,4 +1,4 @@
-#include "event_store.h"
+#include "logging/event_store.h"
 
 #include <stdio.h>
 #include <string.h>

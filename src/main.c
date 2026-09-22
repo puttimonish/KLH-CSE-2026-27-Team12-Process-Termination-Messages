@@ -3,14 +3,14 @@
 #include <unistd.h>
 #include <signal.h>
 
-#include "process_manager.h"
-#include "signal_handler.h"
-#include "ipc.h"
-#include "memory_monitor.h"
-#include "thread_monitor.h"
-#include "logger.h"
-#include "event_store.h"
-#include "dashboard.h"
+#include "process/process_manager.h"
+#include "process/signal_handler.h"
+#include "communication/ipc.h"
+#include "monitoring/memory_monitor.h"
+#include "monitoring/thread_monitor.h"
+#include "logging/logger.h"
+#include "logging/event_store.h"
+#include "dashboard/dashboard.h"
 
 static void record_event(const ProcessResult *result,
                          const char *type,

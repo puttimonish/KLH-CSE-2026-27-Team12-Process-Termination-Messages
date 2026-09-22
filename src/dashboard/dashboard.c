@@ -1,4 +1,4 @@
-#include "dashboard.h"
+#include "dashboard/dashboard.h"
 
 #include <stdio.h>
 

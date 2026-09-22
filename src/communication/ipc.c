@@ -1,4 +1,4 @@
-#include "ipc.h"
+#include "communication/ipc.h"
 
 #include <unistd.h>
 #include <string.h>

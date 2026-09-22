@@ -1,4 +1,4 @@
-#include "thread_monitor.h"
+#include "monitoring/thread_monitor.h"
 
 #include <stdio.h>
 #include <unistd.h>

@@ -2,7 +2,7 @@
 #include <unistd.h>
 #include <signal.h>
 
-#include "signal_handler.h"
+#include "process/signal_handler.h"
 
 void signal_handler(int signal_number)
 {

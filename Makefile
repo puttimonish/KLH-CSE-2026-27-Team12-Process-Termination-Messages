@@ -1,18 +1,18 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -std=c11 -D_POSIX_C_SOURCE=200809L
+CFLAGS = -Wall -Wextra -std=c11 -D_POSIX_C_SOURCE=200809L -Isrc
 LDFLAGS = -pthread
 
 TARGET = process_termination
 
 SRC = src/main.c \
-      src/process_manager.c \
-      src/signal_handler.c \
-      src/ipc.c \
-      src/memory_monitor.c \
-      src/thread_monitor.c \
-      src/logger.c \
-      src/dashboard.c \
-      src/event_store.c
+      src/process/process_manager.c \
+      src/process/signal_handler.c \
+      src/communication/ipc.c \
+      src/monitoring/memory_monitor.c \
+      src/monitoring/thread_monitor.c \
+      src/logging/logger.c \
+      src/dashboard/dashboard.c \
+      src/logging/event_store.c
 
 OBJ = $(SRC:.c=.o)
 
