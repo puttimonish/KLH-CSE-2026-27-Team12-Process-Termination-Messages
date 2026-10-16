@@ -20,3 +20,10 @@ results/screenshots/*
 
 # Runtime process event log
 data/process_events.log
+
+# Standalone CO4-CO6 experiment binaries and generated test data
+/memory_experiment
+/file_io_experiment
+/thread_experiment
+/data/co5_io_demo.txt
+/Makefile.co4-co6-backup
