@@ -48,6 +48,9 @@ static void show_help(void)
     printf("processes         - List live processes from /proc\n");
     printf("procinfo PID      - Inspect process memory and file descriptors\n");
     printf("memory PID        - Display process memory statistics\n");
+    printf("memorytest        - Run the CO4 memory experiment\n");
+    printf("iotest            - Run the CO5 file I/O experiment\n");
+    printf("threadtest        - Run the CO6 synchronization experiment\n");
     printf("parent            - Display shell process information\n");
     printf("run COMMAND       - Execute a Linux command\n");
     printf("child             - Create a managed child process\n");
@@ -133,6 +136,13 @@ static void run_linux_command(const char *input)
     }
 }
 
+/* Run one of the standalone CO4-CO6 experiments. */
+static void run_experiment(const char *name, const char *path)
+{
+    printf("\n[EXPERIMENT: %s]\n", name);
+    run_linux_command(path);
+}
+
 static void create_child(void)
 {
     if (child_running && !child_reaped) {
@@ -159,21 +169,13 @@ static void create_child(void)
     if (pid == 0) {
         ipc_close(child_command_pipe[1]);
 
-        char command = '\0';
-        char message[2];
-
+        char message[2] = {'\0', '\0'};
         int bytes_read = ipc_receive_message(
-            child_command_pipe[0],
-            message,
-            sizeof(message)
-        );
+            child_command_pipe[0], message, sizeof(message));
 
         ipc_close(child_command_pipe[0]);
 
-        if (bytes_read == 1)
-            command = message[0];
-
-        if (bytes_read == 1 && command == 'N') {
+        if (bytes_read == 1 && message[0] == 'N') {
             _exit(0);
         }
 
@@ -288,9 +290,7 @@ static void wait_for_child(void)
         snprintf(details, sizeof(details),
                  "Child terminated by signal %d", WTERMSIG(status));
 
-        record_event(&process_result,
-                     "SIGNAL_TERMINATION",
-                     details);
+        record_event(&process_result, "SIGNAL_TERMINATION", details);
 
         printf("\n[TERMINATION REPORT]\n");
         printf("Child PID   : %d\n", child_pid);
@@ -320,10 +320,9 @@ static void terminate_child(const char *method)
             return;
         }
 
-        char command = 'N';
+        const char message[] = {'N', '\0'};
 
-        if (ipc_send_message(child_command_pipe[1],
-                              (char[]){command, '\0'}) == -1) {
+        if (ipc_send_message(child_command_pipe[1], message) == -1) {
             perror("Sending normal termination request");
             return;
         }
@@ -333,7 +332,6 @@ static void terminate_child(const char *method)
 
         printf("Normal termination request sent to PID %d.\n", child_pid);
         printf("Enter 'wait' to collect its status.\n");
-
     } else if (strcmp(method, "sigterm") == 0) {
         if (kill(child_pid, SIGTERM) == -1) {
             perror("kill(SIGTERM)");
@@ -347,7 +345,6 @@ static void terminate_child(const char *method)
 
         printf("SIGTERM sent to child PID %d.\n", child_pid);
         printf("Enter 'wait' to collect its status.\n");
-
     } else if (strcmp(method, "sigkill") == 0) {
         if (kill(child_pid, SIGKILL) == -1) {
             perror("kill(SIGKILL)");
@@ -361,7 +358,6 @@ static void terminate_child(const char *method)
 
         printf("SIGKILL sent to child PID %d.\n", child_pid);
         printf("Enter 'wait' to collect its status.\n");
-
     } else {
         printf("Unknown method. Use normal, sigterm, or sigkill.\n");
     }
@@ -377,8 +373,7 @@ static void cleanup(void)
 {
     if (child_running && !child_reaped && child_pid > 0) {
         if (child_command_pipe[1] != -1) {
-            char command = 'N';
-            const char message[] = {command, '\0'};
+            const char message[] = {'N', '\0'};
 
             if (ipc_send_message(child_command_pipe[1], message) == -1)
                 perror("Sending shutdown termination request");
@@ -398,10 +393,16 @@ static void cleanup(void)
 
     if (child_command_pipe[0] != -1) {
         ipc_close(child_command_pipe[0]);
+        child_command_pipe[0] = -1;
     }
 
     if (child_command_pipe[1] != -1) {
         ipc_close(child_command_pipe[1]);
+        child_command_pipe[1] = -1;
+    }
+
+    if (monitor_info.initialized) {
+        thread_monitor_stop(&monitor_info);
     }
 }
 
@@ -442,26 +443,32 @@ int main(void)
             show_help();
         } else if (strcmp(command, "thread start") == 0) {
             if (monitor_info.initialized) {
-                printf("Thread monitor is already running or initialized.\\n");
+                printf("Thread monitor is already running or initialized.\n");
             } else if (thread_monitor_start(&monitor_info) == 0) {
                 thread_monitor_print(&monitor_info);
                 printf("Thread monitor started successfully.\n");
             } else {
-                printf("Could not start thread monitor.\\n");
+                printf("Could not start thread monitor.\n");
             }
         } else if (strcmp(command, "thread status") == 0) {
             if (!monitor_info.initialized) {
-                printf("Thread monitor is not running. Use 'thread start'.\\n");
+                printf("Thread monitor is not running. Use 'thread start'.\n");
             } else {
                 thread_monitor_print(&monitor_info);
             }
         } else if (strcmp(command, "thread stop") == 0) {
             if (!monitor_info.initialized) {
-                printf("Thread monitor is not running.\\n");
+                printf("Thread monitor is not running.\n");
             } else {
                 thread_monitor_stop(&monitor_info);
                 printf("Thread monitor stopped and joined successfully.\n");
             }
+        } else if (strcmp(command, "memorytest") == 0) {
+            run_experiment("CO4 MEMORY MANAGEMENT", "./memory_experiment");
+        } else if (strcmp(command, "iotest") == 0) {
+            run_experiment("CO5 FILE SYSTEM AND I/O", "./file_io_experiment");
+        } else if (strcmp(command, "threadtest") == 0) {
+            run_experiment("CO6 THREAD SYNCHRONIZATION", "./thread_experiment");
         } else if (strcmp(command, "parent") == 0) {
             show_parent();
         } else if (strcmp(command, "refresh") == 0) {
@@ -484,12 +491,14 @@ int main(void)
             char *end = NULL;
             errno = 0;
             long pid_value = strtol(command + 7, &end, 10);
+
             while (end != NULL && (*end == ' ' || *end == '\t'))
                 end++;
 
             if (errno != 0 || end == command + 7 || end == NULL ||
-                *end != '\0' || pid_value <= 0 || pid_value > 2147483647L) {
-                printf("Usage: memory PID\\n");
+                *end != '\0' || pid_value <= 0 ||
+                pid_value > 2147483647L) {
+                printf("Usage: memory PID\n");
             } else {
                 MemoryInfo info;
                 pid_t target_pid = (pid_t)pid_value;
@@ -497,7 +506,7 @@ int main(void)
                 if (memory_monitor_read(target_pid, &info) == 0) {
                     memory_monitor_print(target_pid, &info);
                 } else {
-                    printf("Could not read memory information for PID %ld.\\n",
+                    printf("Could not read memory information for PID %ld.\n",
                            pid_value);
                 }
             }
@@ -505,10 +514,13 @@ int main(void)
             char *end = NULL;
             errno = 0;
             long pid_value = strtol(command + 9, &end, 10);
+
             while (end != NULL && (*end == ' ' || *end == '\t'))
                 end++;
+
             if (errno != 0 || end == command + 9 || end == NULL ||
-                *end != '\0' || pid_value <= 0 || pid_value > 2147483647L) {
+                *end != '\0' || pid_value <= 0 ||
+                pid_value > 2147483647L) {
                 printf("Usage: procinfo PID\n");
             } else {
                 inspector_show_process((int)pid_value);

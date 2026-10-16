@@ -32,3 +32,21 @@ clean:
 
 run: $(TARGET)
 	./$(TARGET)
+
+# CO4-CO6 standalone experiments
+MEMORY_EXPERIMENT = memory_experiment
+IO_EXPERIMENT = file_io_experiment
+THREAD_EXPERIMENT = thread_experiment
+
+.PHONY: experiments
+
+experiments: $(MEMORY_EXPERIMENT) $(IO_EXPERIMENT) $(THREAD_EXPERIMENT)
+
+$(MEMORY_EXPERIMENT): src/experiments/memory_experiment.c
+	$(CC) $(CFLAGS) $< -o $@
+
+$(IO_EXPERIMENT): src/experiments/file_io_experiment.c
+	$(CC) $(CFLAGS) $< -o $@
+
+$(THREAD_EXPERIMENT): src/experiments/thread_experiment.c
+	$(CC) $(CFLAGS) -pthread $< -o $@
