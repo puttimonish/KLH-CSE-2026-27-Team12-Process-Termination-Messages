@@ -1,51 +1,41 @@
-#include <stdio.h>
-#include <unistd.h>
+#include "process/signal_handler.h"
+#include <stddef.h>
+
 #include <signal.h>
 
-#include "process/signal_handler.h"
+static volatile sig_atomic_t refresh_requested = 0;
 
 void signal_handler(int signal_number)
 {
-    printf("\n============================================================\n");
-    printf("                 SIGNAL TERMINATION EVENT\n");
-    printf("============================================================\n");
-
-    printf("Process PID      : %d\n", getpid());
-
-    if (signal_number == SIGTERM)
-    {
-        printf("Signal           : SIGTERM (%d)\n", signal_number);
-        printf("Termination      : Requested by parent\n");
+    if (signal_number == SIGUSR1) {
+        refresh_requested = 1;
     }
-    else if (signal_number == SIGINT)
-    {
-        printf("Signal           : SIGINT (%d)\n", signal_number);
-        printf("Termination      : Interrupted by user\n");
-    }
-    else if (signal_number == SIGUSR1)
-    {
-        printf("Signal           : SIGUSR1 (%d)\n", signal_number);
-        printf("Termination      : Custom monitoring event\n");
-    }
-    else
-    {
-        printf("Signal           : %d\n", signal_number);
-    }
+}
 
-    printf("============================================================\n");
+int signal_refresh_requested(void)
+{
+    return refresh_requested != 0;
+}
 
-    /*
-     * Restore the default action and re-raise the signal.
-     * This allows the parent process to detect that the
-     * child actually terminated because of a signal.
-     */
-    signal(signal_number, SIG_DFL);
-    raise(signal_number);
+void clear_signal_refresh_request(void)
+{
+    refresh_requested = 0;
 }
 
 void setup_signal_handlers(void)
 {
-    signal(SIGTERM, signal_handler);
-    signal(SIGINT, signal_handler);
-    signal(SIGUSR1, signal_handler);
+    struct sigaction action;
+
+    action.sa_handler = signal_handler;
+    sigemptyset(&action.sa_mask);
+    action.sa_flags = 0;
+
+    sigaction(SIGUSR1, &action, NULL);
+
+    /*
+     * Preserve normal termination behavior for SIGTERM and SIGINT.
+     * Their default actions terminate the receiving process.
+     */
+    signal(SIGTERM, SIG_DFL);
+    signal(SIGINT, SIG_DFL);
 }

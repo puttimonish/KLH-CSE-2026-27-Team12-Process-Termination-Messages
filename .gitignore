@@ -13,3 +13,10 @@ results/logs/*
 
 # Generated screenshots
 results/screenshots/*
+
+# Source-editing backups
+*-backup
+*.co1-backup
+
+# Runtime process event log
+data/process_events.log

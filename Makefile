@@ -10,6 +10,7 @@ SRC = src/main.c \
       src/communication/ipc.c \
       src/monitoring/memory_monitor.c \
       src/monitoring/thread_monitor.c \
+      src/monitoring/process_inspector.c \
       src/logging/logger.c \
       src/dashboard/dashboard.c \
       src/logging/event_store.c

@@ -4,12 +4,14 @@
 #include <pthread.h>
 #include <sys/types.h>
 
-typedef struct
-{
+typedef struct {
     pthread_t thread_id;
     pid_t process_id;
     const char *thread_name;
     int active;
+    int initialized;
+    pthread_mutex_t mutex;
+    pthread_cond_t condition;
 } ThreadInfo;
 
 int thread_monitor_start(ThreadInfo *info);
